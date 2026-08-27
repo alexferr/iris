@@ -1,0 +1,77 @@
+name: Mise à jour des données Enphase
+
+on:
+  schedule:
+    # Tous les jours à 06:15 UTC (07:15/08:15 Paris), après la fin de la nuit à 7h.
+    - cron: '15 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Récupération des données Enphase
+        env:
+          ENPHASE_API_KEY: ${{ secrets.ENPHASE_API_KEY }}
+          ENPHASE_CLIENT_ID: ${{ secrets.ENPHASE_CLIENT_ID }}
+          ENPHASE_CLIENT_SECRET: ${{ secrets.ENPHASE_CLIENT_SECRET }}
+          ENPHASE_REFRESH_TOKEN: ${{ secrets.ENPHASE_REFRESH_TOKEN }}
+          ENPHASE_SYSTEM_ID: ${{ secrets.ENPHASE_SYSTEM_ID }}
+        run: node scripts/update-data.mjs
+
+      # Le refresh token Enphase change à chaque rafraîchissement : on met à
+      # jour le secret du repo (GH_PAT = fine-grained PAT avec permission
+      # « Secrets: read and write » sur ce repo).
+      - name: Rotation du secret ENPHASE_REFRESH_TOKEN
+        if: hashFiles('refresh_token.txt') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          echo "::add-mask::$(cat refresh_token.txt)"
+          gh secret set ENPHASE_REFRESH_TOKEN --repo "$GITHUB_REPOSITORY" < refresh_token.txt
+          rm refresh_token.txt
+
+      - name: Commit du JSON mis à jour
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/data/consumption.json
+          if git diff --cached --quiet; then
+            echo "Pas de nouvelle donnée."
+          else
+            git commit -m "data: mise à jour consommation $(date -u +%F)"
+            git push
+          fi
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: update
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
