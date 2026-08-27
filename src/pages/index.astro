@@ -1,19 +1,25 @@
 ---
 import data from '../data/consumption.json';
 
-const nights = [...data.nights].sort((a, b) => a.date.localeCompare(b.date));
+const allNights = [...data.nights].sort((a, b) => a.date.localeCompare(b.date));
 const frDate = (ymd) => ymd.split('-').reverse().join('-');
 
+// Moyenne glissante sur 7 nuits (en Wh), calculée sur l'historique complet
+// pour que le début de la fenêtre affichée reste exact.
+const allWh = allNights.map((n) => n.wh);
+const allRoll = allWh.map((_, i) => {
+  const win = allWh.slice(Math.max(0, i - 6), i + 1);
+  return Math.round((win.reduce((a, b) => a + b, 0) / win.length) * 10) / 10;
+});
+
+// Affichage limité à l'année glissante ; le JSON conserve tout l'historique.
+const WINDOW = 365;
+const nights = allNights.slice(-WINDOW);
 const dates = nights.map((n) => frDate(n.date));
 const wh = nights.map((n) => n.wh);
 const cov = nights.map((n) => n.coverage);
 const hourly = nights.map((n) => n.hourlyWh);
-
-// Moyenne glissante sur 7 nuits (en Wh).
-const roll = wh.map((_, i) => {
-  const win = wh.slice(Math.max(0, i - 6), i + 1);
-  return Math.round((win.reduce((a, b) => a + b, 0) / win.length) * 10) / 10;
-});
+const roll = allRoll.slice(-nights.length);
 
 const totalKwh = wh.reduce((a, b) => a + b, 0) / 1000;
 const avgKwh = totalKwh / (wh.length || 1);
