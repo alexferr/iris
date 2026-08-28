@@ -2,8 +2,10 @@ name: Mise à jour des données Enphase
 
 on:
   schedule:
-    # Tous les jours à 06:15 UTC (07:15/08:15 Paris), après la fin de la nuit à 7h.
-    - cron: '15 6 * * *'
+    # Tous les jours vers 06:43 UTC (07:43/08:43 Paris), après la fin de la nuit
+    # à 7h. Minute « creuse » choisie exprès : les crons GitHub aux minutes
+    # rondes (:00, :15, :30) sont souvent retardés ou abandonnés sous charge.
+    - cron: '43 6 * * *'
   workflow_dispatch:
 
 permissions:
